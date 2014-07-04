@@ -4,7 +4,7 @@ import play.api._
 import play.api.mvc._
 import play.api.Play.current
 import com.mongodb.casbah._
-import com.mongodb.{MongoClientOptions, MongoException, ServerAddress, MongoOptions}
+import com.mongodb.{MongoClientOptions, MongoException, ServerAddress, MongoOptions,MongoCredential}
 import com.mongodb.casbah.gridfs.GridFS
 import commons.MongoDBObject
 import com.mongodb.casbah.MongoClientOptions
@@ -25,17 +25,13 @@ class SalatPlugin(app: Application) extends Plugin {
 
     def connection: MongoClient = {
       if (conn == null) {
-        conn = options.map(opts => MongoClient(hosts, opts)).getOrElse(MongoClient(hosts))
-
-        val authOpt = for {
-          u <- user
-          p <- password
-        } yield connection(dbName).authenticate(u, p)
-
-        if (!authOpt.getOrElse(true)) {
-          throw configuration.reportError("mongodb", "Access denied to MongoDB database: [" + dbName + "] with user: [" + user.getOrElse("") + "]")
+        
+        val credentials = user match {
+          case Some(u) => List(MongoCredential.createMongoCRCredential(user.get,dbName,password.getOrElse("").toCharArray())  )
+          case None => List()
         }
 
+        conn = options.map(opts => MongoClient(hosts, credentials,opts)).getOrElse(MongoClient(hosts,credentials))
         conn.setWriteConcern(writeConcern)
       }
       conn
@@ -79,7 +75,7 @@ class SalatPlugin(app: Application) extends Plugin {
 
     source.getString("uri").map { str =>
       // MongoURI config - http://www.mongodb.org/display/DOCS/Connections
-      val uri = MongoURI(str)
+      val uri = MongoClientURI(str)
       val hosts = uri.hosts.map { host =>
         if (host.contains(':')) {
           val Array(h, p) = host.split(':')
@@ -101,7 +97,6 @@ class SalatPlugin(app: Application) extends Plugin {
       val port = source.getInt("port").getOrElse(27017)
       val user:Option[String] = source.getString("user")
       val password:Option[String] = source.getString("password")
-
       // Replica set config
       val hosts: List[ServerAddress] = source.getConfig("replicaset").map { replicaset =>
         replicaset.subKeys.map { hostKey =>
@@ -112,7 +107,7 @@ class SalatPlugin(app: Application) extends Plugin {
         }.toList.reverse
       }.getOrElse(List.empty)
 
-      val writeConcern = WriteConcern.valueOf(source.getString("writeconcern", Some(Set("fsyncsafe", "replicassafe", "safe", "normal"))).getOrElse("safe"))
+      val writeConcern = WriteConcern.valueOf(source.getString("writeconcern", Some(Set("fsyncsafe", "replicassafe", "safe", "normal"))).getOrElse("safe")).get
 
       // If there are replicasets configured go with those otherwise fallback to simple config
       if (hosts.isEmpty)

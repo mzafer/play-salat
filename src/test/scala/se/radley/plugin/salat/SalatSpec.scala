@@ -157,13 +157,6 @@ object SalatSpec extends Specification {
         col must beAnInstanceOf[MongoCollection]
       }
 
-      "set mongo options" in {
-        val col = salat.collection("salat-collection")
-        val options = col.db.underlying.getMongo().getMongoOptions()
-        options.connectionsPerHost must equalTo(255)
-        options.threadsAllowedToBlockForConnectionMultiplier must equalTo(24)
-      }
-
     }
   }
 
